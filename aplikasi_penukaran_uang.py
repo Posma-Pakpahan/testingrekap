@@ -1,48 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import mysql.connector
 
-# --- Konfigurasi koneksi MySQL ---
-def koneksi_db():
-    return mysql.connector.connect(
-        host="localhost",       # Ganti jika pakai hosting
-        user="root",            # Ganti sesuai user MySQL kamu
-        password="", # Ganti sesuai password MySQL kamu
-        database="keuangan_gereja"  # Pastikan database sudah dibuat
-    )
-
-# --- Inisialisasi dan Fungsi ---
-def simpan_transaksi(waktu, sesi, nama, jenis, uang_masuk, via_qris):
-    db = koneksi_db()
-    cursor = db.cursor()
-    sql = """
-        INSERT INTO transaksi (waktu, sesi, nama, jenis, uang_masuk, via_qris)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """
-    val = (waktu, sesi, nama, jenis, uang_masuk, via_qris)
-    cursor.execute(sql, val)
-    db.commit()
-    db.close()
-
-
-def ambil_semua_data():
-    db = koneksi_db()
-    df = pd.read_sql("SELECT * FROM transaksi ORDER BY waktu DESC", con=db)
-    db.close()
-    return df
-
-
-def hapus_semua_data():
-    db = koneksi_db()
-    cursor = db.cursor()
-    cursor.execute("DELETE FROM transaksi")
-    db.commit()
-    db.close()
-
-# --- Streamlit UI ---
+# --- Setup halaman ---
 st.set_page_config(page_title="Rekap Tukaran Uang & Profit", layout="wide")
 st.title("💸 Rekapitulasi Tukaran Uang & Profit Jemaat")
+
+# Inisialisasi data jika belum ada
+if "data" not in st.session_state:
+    st.session_state["data"] = pd.DataFrame(columns=["waktu", "sesi", "nama", "jenis", "uang_masuk", "via_qris"])
 
 # Sidebar modal
 st.sidebar.header("🪙 Modal Awal")
@@ -63,13 +29,24 @@ with st.form("form_input"):
 
     submitted = st.form_submit_button("+ Tambah Transaksi")
 
+# Simpan data ke session_state
 if submitted:
     waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    simpan_transaksi(waktu, sesi, nama, jenis_transaksi, uang_masuk, "Ya" if via_qris else "Tidak")
+    new_data = {
+        "waktu": waktu,
+        "sesi": sesi,
+        "nama": nama,
+        "jenis": jenis_transaksi,
+        "uang_masuk": uang_masuk,
+        "via_qris": "Ya" if via_qris else "Tidak"
+    }
+    st.session_state["data"] = pd.concat([st.session_state["data"], pd.DataFrame([new_data])], ignore_index=True)
     st.success("Transaksi berhasil ditambahkan!")
 
+# Ambil data
+data = st.session_state["data"]
+
 # Tampilkan data
-data = ambil_semua_data()
 st.subheader("📊 Data Transaksi")
 st.dataframe(data, use_container_width=True)
 
@@ -106,5 +83,5 @@ with col_export1:
 
 with col_export2:
     if st.button("🗑️ Hapus Semua Data"):
-        hapus_semua_data()
-        st.warning("Semua data telah dihapus. Silakan refresh halaman.")
+        st.session_state["data"] = pd.DataFrame(columns=data.columns)
+        st.warning("Semua data telah dihapus.")
